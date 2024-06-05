@@ -3,13 +3,12 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import bodyParser from "body-parser";
 import cors from "cors";
-import cron from "node-cron";
 import runeXRoutes from "./routes/RuneXRouter";
 
 dotenv.config();
 
 const app: Express = express();
-const port = process.env.PORT || 6000;
+const port = process.env.PORT || 9000;
 
 app.use(
   cors({

@@ -5,37 +5,36 @@ import historyModel from "../model/historyModel";
 import walletModel from "../model/walletModel";
 import Joi from 'joi';
 import mongoose from "mongoose";
+
 Bitcoin.initEccLib(ecc);
 
 const historySchema = Joi.object({
   walletType: Joi.string().required(),
   txId: Joi.string().required(),
   paymentAddress: Joi.string().required(),
-  amountToTransfer: Joi.number().required()
+  amountToTransfer: Joi.string().required()
 });
-const WalletSchema = Joi.object({
+const walletSchema = Joi.object({
   paymentAddress: Joi.string().required(),
   paymentPublicKey: Joi.string().required(),
   ordinalAddress: Joi.string().required(),
-  ordinalPublicKey: Joi.number().required(),
-  walletType: Joi.number().required(),
-  hash: Joi.number().required(),
+  ordinalPublicKey: Joi.string().required(),
+  walletType: Joi.string().required(),
+  hash: Joi.string().required(),
 });
 
 
 export const writeHistory = async (req: Request, res: Response) => {
+  const { error, value } = historySchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, error: error.details[0].message });
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const {
-      walletType,
-      txId,
-      paymentAddress,
-      amountToTransfer } = req.body;
-    const { error, value } = historySchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, error: error.details[0].message });
-    }
+    const { walletType, txId, paymentAddress, amountToTransfer } = value;
+
     console.log("writeHistory req.body ==>", req.body);
 
     const existingHistory = await historyModel.findOne({
@@ -43,40 +42,38 @@ export const writeHistory = async (req: Request, res: Response) => {
       txId,
       paymentAddress,
       amountToTransfer,
-    });
+    }, { session: session });
 
     if (existingHistory) {
-      // If the entry already exists, return a response indicating that
       return res.status(409).json({
         success: false,
         error: 'This history entry already exists',
       });
     }
 
-    const newHistory = new historyModel({
-      walletType,
-      txId,
-      paymentAddress,
-      amountToTransfer
-    })
-
-    await newHistory.save({session })
-
+    const newHistory = new historyModel(value);
+    await newHistory.save({ session });
+    await session.commitTransaction();
     return res.status(200).json({ success: true, payload: newHistory });
   } catch (error) {
-    console.log("Get Raffles Error : ", error);
+    console.error("Write History Error: ", error);
     await session.abortTransaction();
-    return res.status(500).json({ success: false });
-  }
-  finally {
-    await session.endSession();
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  } finally {
+    session.endSession();
   }
 };
 
+
+
 export const walletConnect = async (req: Request, res: Response) => {
+  const { error, value } = walletSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, error: error.details[0].message });
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
-
   try {
     const {
       paymentAddress,
@@ -85,11 +82,8 @@ export const walletConnect = async (req: Request, res: Response) => {
       ordinalPublicKey,
       walletType,
       hash
-    } = req.body;
-    const { error, value } = historySchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, error: error.details[0].message });
-    }
+    } = value;
+
     console.log("walletConnect req.body ==>", req.body);
 
     const walletExist = await walletModel.findOne({
@@ -98,42 +92,31 @@ export const walletConnect = async (req: Request, res: Response) => {
       ordinalAddress,
       ordinalPublicKey,
       walletType,
-    })
+    });
 
     if (walletExist) {
-      if (walletExist.hash == hash) return res.status(200).json({
-        success: true,
+      const message = walletExist.hash === hash ? "Signed successfully." : "Hash mismatch.";
+      const status = walletExist.hash === hash ? 200 : 422;
+      return res.status(status).json({
+        success: walletExist.hash === hash,
         payload: walletExist,
-        message: "Signed successfully."
-      })
-      else return res.status(200).json({
-        success: false,
-        payload: walletExist,
-        message: "no matchHash "
-      })
+        message
+      });
     }
 
-    const newWallet = new walletModel({
-      paymentAddress,
-      paymentPublicKey,
-      ordinalAddress,
-      ordinalPublicKey,
-      walletType,
-      hash
-    })
-
-    await newWallet.save({session })
-
-    return res.status(200).json({
+    const newWallet = new walletModel(value);
+    await newWallet.save({ session });
+    await session.commitTransaction();
+    return res.status(201).json({
       success: true,
       payload: newWallet,
-      message: "New User is stored successfully!"
+      message: "New user is stored successfully!"
     });
   } catch (error) {
-    console.log("Get Raffles Error : ", error);
+    console.error("Wallet Connect Error: ", error);
     await session.abortTransaction();
     return res.status(500).json({ success: false });
   } finally {
-    await session.endSession();
+    session.endSession();
   }
 };
