@@ -1,2 +1,2 @@
-This is a wallet connect: Unisat, Xverse, Magic Eden.
-Functionality: Sign message and send bitcoin 
+Wallet integration for Unisat, Xverse and Magic Eden.
+Connect and Sign & Push psbt of these wallets.
